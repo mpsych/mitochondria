@@ -19,6 +19,7 @@ from keras.models import *
 from keras.layers import Input, merge, Conv2D, MaxPooling2D, UpSampling2D, Dropout, Cropping2D
 from keras.optimizers import *
 from keras.callbacks import ModelCheckpoint, LearningRateScheduler
+from keras import backend as K
 from keras import backend as keras
 import keras.callbacks
 from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array, load_img

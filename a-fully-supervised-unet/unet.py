@@ -58,7 +58,7 @@ def train(model, imgs_train, imgs_mask_train, imgs_test, imgs_mask_test, model_n
         os.mkdir(model_name)
 
     sname = model_name + '/weights.{epoch:02d}-{val_loss:.2f}.hdf5'
-    model_checkpoint = ModelCheckpoint(sname, monitor='val_loss',verbose=1, save_best_only=False, period=5)
+    model_checkpoint = ModelCheckpoint(sname, monitor='val_loss',verbose=1, save_best_only=False, save_freq=5)
     print('saving model checkpoints in', model_name + '/')
     
     logfile_path = model_name + '/log.txt'
@@ -132,7 +132,11 @@ def train(model, imgs_train, imgs_mask_train, imgs_test, imgs_mask_test, model_n
     datagen = datagen.flow(imgs_train, batch_size=bt_size,shuffle=True, seed=seed, save_to_dir=train_dir, save_prefix=train_pref)
     datagen_mask = datagen_mask.flow(imgs_mask_train, batch_size=bt_size, shuffle=True,seed=seed, save_to_dir=test_dir, save_prefix=test_pref)
 
-    train_generator = zip(datagen, datagen_mask)
+    def combine_generator(gen1, gen2):
+        while True:
+            yield(next(gen1), next(gen2))
+    
+    train_generator = combine_generator(datagen, datagen_mask)#zip(datagen, datagen_mask)
 
     #setting up validation generator
     data_val_gen_args = dict(num_channels = MEMORY,
@@ -159,9 +163,9 @@ def train(model, imgs_train, imgs_mask_train, imgs_test, imgs_mask_test, model_n
     datagen_val = datagen_val.flow(imgs_test, batch_size=bt_size, shuffle=True, seed=seed)
     datagen_val_mask = datagen_val_mask.flow(imgs_mask_test, batch_size=bt_size, shuffle=True, seed=seed)
 
-    test_generator = zip(datagen_val, datagen_val_mask)
+    test_generator = combine_generator(datagen_val, datagen_val_mask)#zip(datagen_val, datagen_val_mask)
 
-
+    print(train_generator)
     model.fit_generator(train_generator,
                              steps_per_epoch=iter_per_epoch, epochs=train_epochs, 
                              validation_data=test_generator,
@@ -202,22 +206,26 @@ def get_unet(lrate, img_rows=512, img_cols=512, dr_rate=0.5, diceloss=False, jac
     drop5 = Dropout(dr_rate)(conv5)
 
     up6 = Conv2D(start_filters*8, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(drop5))
-    merge6 = merge([drop4,up6], mode = 'concat', concat_axis = 3)
+#     merge6 = merge([drop4,up6], mode = 'concat', concat_axis = 3)
+    merge6 = merge.concatenate([drop4,up6], axis=3)
     conv6 = Conv2D(start_filters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge6)
     conv6 = Conv2D(start_filters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv6)
 
     up7 = Conv2D(start_filters*4, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv6))
-    merge7 = merge([conv3,up7], mode = 'concat', concat_axis = 3)
+#     merge7 = merge([conv3,up7], mode = 'concat', concat_axis = 3)
+    merge7 = merge.concatenate([conv3,up7], axis=3)
     conv7 = Conv2D(start_filters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
     conv7 = Conv2D(start_filters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
 
     up8 = Conv2D(start_filters*4, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv7))
-    merge8 = merge([conv2,up8], mode = 'concat', concat_axis = 3)
+#     merge8 = merge([conv2,up8], mode = 'concat', concat_axis = 3)
+    merge8 = merge.concatenate([conv2,up8], axis=3)
     conv8 = Conv2D(start_filters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
     conv8 = Conv2D(start_filters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
 
     up9 = Conv2D(start_filters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv8))
-    merge9 = merge([conv1,up9], mode = 'concat', concat_axis = 3)
+#     merge9 = merge([conv1,up9], mode = 'concat', concat_axis = 3)
+    merge9 = merge.concatenate([conv1,up9], axis=3)
     conv9 = Conv2D(start_filters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
     conv9 = Conv2D(start_filters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
     conv9 = Conv2D(2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
@@ -237,7 +245,7 @@ def get_unet(lrate, img_rows=512, img_cols=512, dr_rate=0.5, diceloss=False, jac
     elif customloss:
         lss = metrics.keras_binary_crossentropy_mod
 
-    model = Model(input = inputs, output = conv10)
+    model = Model(inputs, conv10)
 
     model.compile(optimizer = Adam(lr = lrate), loss = lss, metrics = ['accuracy', metrics.keras_precision, metrics.keras_recall, metrics.keras_jaccard_coef, metrics.keras_dice_coef])
 
